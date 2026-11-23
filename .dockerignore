@@ -1,0 +1,33 @@
+# 版本控制 / IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Python 虚拟环境与缓存
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+
+# 运行数据:镜像内由 scripts/seed_demo.py 重新生成
+data
+
+# 本机密钥:运行时由 compose 注入;保留示例文件
+.env
+.env.*
+!.env.example
+
+# 开发辅助 / 会话文件
+.files
+.run
+.claude
+.codex
+.mcp.json
+
+# 测试代码不需要进镜像
+tests

@@ -1,0 +1,91 @@
+# 人工语义映射(设计文档 §4.2):对无 COMMENT 的表/字段补中文语义,是准确率的生命线。
+tables:
+  customers:
+    comment: 客户信息表,每行一个客户
+    related: [orders]
+    columns:
+      id: 客户ID
+      name: 客户名称
+      region:
+        comment: 所属大区
+        enum: auto
+      level:
+        comment: 客户等级
+        enum: [普通, 银牌, 金牌]
+      industry:
+        comment: 所属行业(可能为空)
+        enum: auto
+      annual_purchase: 年采购额(元)
+      contact_phone: 联系人手机号(敏感字段)
+      created_at: 建档日期(YYYY-MM-DD)
+
+  employees:
+    comment: 销售员表,每行一名销售代表
+    related: [orders]
+    columns:
+      id: 销售员ID
+      name: 销售员姓名
+      region:
+        comment: 负责大区
+        enum: auto
+      hire_date: 入职日期(YYYY-MM-DD)
+      resign_date: 离职日期,为空(NULL)表示在职
+
+  products:
+    comment: 产品表
+    columns:
+      id: 产品ID
+      name: 产品名称
+      category:
+        comment: 产品类别
+        enum: auto
+      price: 销售单价(元)
+      cost: 成本单价(元)
+      launch_date: 上市日期(YYYY-MM-DD)
+      is_active: 是否在售(1=在售,0=已下架)
+
+  orders:
+    comment: 订单主表,每行一笔订单;amount 为整单金额,等于其明细 subtotal 之和
+    related: [customers, employees, order_items]
+    columns:
+      id: 订单ID
+      customer_id: 客户ID,关联customers.id
+      employee_id: 销售员ID,关联employees.id,可能为空(无归属订单)
+      order_date: 下单日期(YYYY-MM-DD)
+      amount: 订单总金额(元)
+      status:
+        comment: 订单状态
+        enum: [已完成, 已取消, 进行中]
+
+  order_items:
+    comment: 订单明细表,每行一个订单中的一种产品;按产品/类别统计金额用本表 subtotal
+    related: [orders, products]
+    columns:
+      id: 明细ID
+      order_id: 订单ID,关联orders.id
+      product_id: 产品ID,关联products.id
+      quantity: 数量
+      unit_price: 成交单价(元)
+      subtotal: 小计金额(元)= quantity × unit_price
+
+  returns:
+    comment: 退货表,每行一次退货,关联原订单
+    related: [orders]
+    columns:
+      id: 退货ID
+      order_id: 原订单ID,关联orders.id
+      return_date: 退货日期(YYYY-MM-DD)
+      refund_amount: 退款金额(元)
+      reason:
+        comment: 退货原因
+        enum: auto
+
+  sales_targets:
+    comment: 销售目标表,每行一个大区在某月的销售目标;计算达成率与实际销售额对比用
+    columns:
+      id: 目标ID
+      region:
+        comment: 大区
+        enum: auto
+      month: 目标月份(YYYY-MM)
+      target_amount: 目标销售额(元)

@@ -1,0 +1,117 @@
+# 剧本杀连锁门店(马鞍山 5 店)人工语义映射:SQLite 无列注释,中文含义全部来自本文件。
+tables:
+  stores:
+    comment: 门店表,每行一家剧本杀门店;店长查数时按本店隔离
+    related: [staff, sessions, players, revenue_targets]
+    columns:
+      id: 门店ID
+      name: 门店名称
+      city: 城市
+      district:
+        comment: 所属区县
+        enum: auto
+      open_date: 开业日期(YYYY-MM-DD)
+      manager_name: 店长姓名
+      status:
+        comment: 营业状态
+        enum: [营业中, 筹备中, 已闭店]
+
+  staff:
+    comment: 员工表,包含店长/前台/DM/NPC;resign_date 为空表示在职
+    related: [stores, sessions]
+    columns:
+      id: 员工ID
+      name: 员工姓名
+      store_id: 所属门店ID,关联stores.id
+      role:
+        comment: 岗位
+        enum: [店长, 前台, DM, NPC]
+      dm_level:
+        comment: DM等级(非DM为空)
+        enum: [初级, 中级, 高级]
+      phone: 员工手机号(敏感字段)
+      hire_date: 入职日期(YYYY-MM-DD)
+      resign_date: 离职日期,为空(NULL)表示在职
+
+  scripts:
+    comment: 剧本表,每个剧本一行;price_per_player 为人均价格
+    related: [sessions, script_licenses]
+    columns:
+      id: 剧本ID
+      name: 剧本名称
+      category:
+        comment: 剧本类型
+        enum: [情感, 欢乐, 恐怖, 机制, 硬核, 阵营, 还原]
+      player_min: 最少玩家数
+      player_max: 最多玩家数
+      duration_min: 时长(分钟)
+      price_per_player: 人均价格(元)
+      difficulty:
+        comment: 难度
+        enum: [新手, 进阶, 硬核]
+      launch_date: 发行/上架日期(YYYY-MM-DD)
+      is_active: 是否可开(1=启用,0=已下架)
+
+  script_licenses:
+    comment: 门店购本记录,一行代表某门店获得某剧本的开本授权
+    related: [stores, scripts]
+    columns:
+      id: 授权ID
+      store_id: 门店ID,关联stores.id
+      script_id: 剧本ID,关联scripts.id
+      license_date: 购本/授权日期(YYYY-MM-DD)
+      license_fee: 购本费(元)
+
+  players:
+    comment: 玩家会员表,每行一名玩家;home_store_id 为首次到店/常去门店
+    related: [stores, session_players]
+    columns:
+      id: 玩家ID
+      nickname: 玩家昵称
+      phone: 玩家手机号(敏感字段)
+      member_level:
+        comment: 会员等级
+        enum: [普通, 银卡, 金卡, 黑卡]
+      register_date: 注册日期(YYYY-MM-DD)
+      home_store_id: 归属门店ID(首次到店),关联stores.id
+
+  sessions:
+    comment: >-
+      场次表,每行一次开本;total_amount 为该场玩家消费合计,
+      统计营收只算 status='已完成' 的场次,已取消场次不计营收
+    related: [stores, scripts, staff, session_players]
+    columns:
+      id: 场次ID
+      store_id: 门店ID,关联stores.id
+      script_id: 剧本ID,关联scripts.id
+      dm_id: 主持DM的员工ID,关联staff.id,可能为空(未分配DM)
+      session_date: 开本日期(YYYY-MM-DD)
+      start_time: 开始时间(HH:MM)
+      end_time: 结束时间(HH:MM)
+      status:
+        comment: 场次状态
+        enum: [已完成, 进行中, 待开本, 已取消]
+      player_count: 本场玩家人数
+      total_amount: 本场营收(元),等于玩家实付金额合计
+
+  session_players:
+    comment: 玩家到场明细,每行一个玩家参加一场;统计消费、渠道、新老玩家用本表
+    related: [sessions, players]
+    columns:
+      id: 明细ID
+      session_id: 场次ID,关联sessions.id
+      player_id: 玩家ID,关联players.id
+      price_paid: 实付金额(元),已含渠道折扣
+      channel:
+        comment: 购票渠道
+        enum: [美团, 大众点评, 小程序, 到店, 拼车群]
+      is_new: 是否新玩家(1=注册60天内首次到店,0=老玩家)
+
+  revenue_targets:
+    comment: 门店月度营收目标表,每行一家门店某月的目标营收
+    related: [stores]
+    columns:
+      id: 目标ID
+      store_id: 门店ID,关联stores.id
+      month: 目标月份(YYYY-MM)
+      target_amount: 目标营收(元)

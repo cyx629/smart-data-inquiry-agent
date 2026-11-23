@@ -1,0 +1,29 @@
+# 剧本杀业务术语表(仅 scriptkill 数据源注入生成 prompt,避免与销售库口径混用)。
+- term: 营收/营业额
+  definition: 已完成场次(sessions.status='已完成')的 total_amount 之和;已取消场次不计营收
+- term: 客单价/人均消费
+  definition: 已完成场次总营收 ÷ 已完成场次玩家人数合计(player_count 之和),不是按人次的简单平均
+- term: 场均人数
+  definition: 已完成场次玩家人数合计 ÷ 已完成场次数
+- term: 上座率
+  definition: 已完成场次玩家人数合计 ÷ 这些场次对应剧本最多可容纳人数(scripts.player_max)合计
+- term: 开本/场次
+  definition: sessions 表一行代表开一场;统计场次数量时默认排除 status='已取消'
+- term: 本卖得好
+  definition: 默认按已完成场次数排序;若问题明确说“营收最高”,则按已完成场次 total_amount 排序
+- term: DM场次
+  definition: 按 sessions.dm_id 关联 staff 统计已完成场次数;dm_id 为空的场次不计入任何 DM
+- term: 新玩家
+  definition: session_players.is_new=1 的到场明细(注册 60 天内首次到店);新玩家占比=新玩家明细数÷全部完成场次明细数
+- term: 复购玩家
+  definition: 参加过至少 2 场已完成场次的玩家(按 player_id 去重统计)
+- term: 取消率
+  definition: 已取消场次数 ÷ 全部场次数(含已完成、进行中、待开本、已取消)
+- term: 目标达成率
+  definition: 某门店某月的已完成场次营收 ÷ revenue_targets.target_amount
+- term: 在职员工
+  definition: staff.resign_date 为 NULL 的员工(可按 role 进一步筛 DM/店长/前台/NPC)
+- term: 门店隔离
+  definition: 店长只能看本门店数据;生产环境通过数据源 row_filters 固定 store_id 实现,跨店对比仅总部角色可用
+- term: 会员等级
+  definition: 普通 < 银卡 < 金卡 < 黑卡,存于 players.member_level

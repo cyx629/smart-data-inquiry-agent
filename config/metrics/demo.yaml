@@ -1,0 +1,27 @@
+# 指标语义层 + 输出干预(命中即跳过 LLM,确定性直出)。
+#
+# overrides:问题精确匹配(忽略标点/空格)→ 强制 SQL,用于纠正模型总答错的高频问法;
+# metrics:正则命名分组 → SQL 模板,{参数}代入;{month2} 为补零形式(6 -> 06)。
+
+overrides:
+  - name: 客单价口径
+    question: 客单价是多少
+    sql: >
+      SELECT ROUND(SUM(amount) * 1.0 / COUNT(DISTINCT customer_id), 2) AS 客单价
+      FROM orders WHERE status = '已完成'
+
+metrics:
+  # 更具体的模式放前面,优先匹配
+  - name: 月度大区销售额
+    pattern: "(?P<year>20\\d{2})年(?P<month>\\d{1,2})月(?P<region>华东|华北|华南|西南|东北|西北)(大区)?的?销售额"
+    sql_template: >
+      SELECT SUM(o.amount) AS 销售额 FROM orders o
+      JOIN customers c ON o.customer_id = c.id
+      WHERE o.status = '已完成' AND c.region = '{region}'
+        AND strftime('%Y-%m', o.order_date) = '{year}-{month2}'
+
+  - name: 月度销售额
+    pattern: "(?P<year>20\\d{2})年(?P<month>\\d{1,2})月的?销售额"
+    sql_template: >
+      SELECT SUM(amount) AS 销售额 FROM orders
+      WHERE status = '已完成' AND strftime('%Y-%m', order_date) = '{year}-{month2}'

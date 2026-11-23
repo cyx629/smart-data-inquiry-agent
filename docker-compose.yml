@@ -1,0 +1,48 @@
+# POC 精简形态(设计文档 §9):单容器,零外部依赖。
+# 生产建议:多副本 + Nginx + PostgreSQL(审计/checkpointer)+ Milvus,按文档部署架构扩展。
+services:
+  smart-data-inquiry:
+    build: .
+    image: smart-data-inquiry:latest
+    ports:
+      - "8000:8000"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-qwen-plus}
+      LLM_LIGHT_MODEL: ${LLM_LIGHT_MODEL:-qwen-turbo}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+    volumes:
+      - ./config:/app/config:ro     # 数据源/语义映射配置外挂,改配置不用重建镜像
+      - sdi-data:/app/data          # 审计/checkpointer/few-shot 回灌持久化
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/datasources', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  chat-ui:                          # Chainlit 对话前端
+    build: .
+    image: smart-data-inquiry:latest
+    command: ["chainlit", "run", "ui/chainlit_app.py", "--host", "0.0.0.0", "--port", "8501", "--headless"]
+    ports:
+      - "8502:8501"
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-qwen-plus}
+      LLM_LIGHT_MODEL: ${LLM_LIGHT_MODEL:-qwen-turbo}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+    volumes:
+      - ./config:/app/config:ro
+      - sdi-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  sdi-data:

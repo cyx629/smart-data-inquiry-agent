@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 本地环境与密钥
+.env
+.venv/
+venv/
+
+# 本地数据(演示库可由 scripts/seed_*.py 重新生成)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / 本地工具
+.idea/
+.codex/
+.files/
+.run/
+.claude/settings.local.json
+.mcp.json
+
+# 独立子项目,不属于本仓库
+viral_writer_pro/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,23 @@
+# 核心框架(版本锁定,见调研文档风险清单)
+langgraph>=0.2,<0.4
+langgraph-checkpoint-sqlite>=2.0
+sqlalchemy>=2.0,<2.1
+sqlglot>=25.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+openai>=1.30
+httpx[socks]>=0.27       # 本机存在 socks 代理环境变量时 openai 客户端需要
+pydantic-settings>=2.2
+pyyaml>=6.0
+
+# 数据源驱动(MySQL 内置;达梦 dmPython / 金仓 ksycopg2 需官方介质安装,见 README)
+pymysql>=1.1
+
+# 对话前端(Chainlit:自带执行步骤可视化)
+chainlit>=2.0
+plotly>=5.20
+matplotlib>=3.8       # 图表服务端渲染 PNG(内网/受限网络必显示)
+
+# 开发与测试
+pytest>=8.0
+httpx>=0.27

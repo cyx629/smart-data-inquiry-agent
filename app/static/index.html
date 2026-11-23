@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能问数</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --border:#e3e5e8; --accent:#2563eb; --text:#1f2328; --muted:#6b7280; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:900px; margin:0 auto; padding:16px; display:flex; flex-direction:column; height:100vh; }
+  header { display:flex; align-items:center; gap:12px; padding-bottom:12px; }
+  header h1 { font-size:18px; margin:0; }
+  header .hint { font-size:12px; color:var(--muted); margin-left:auto; }
+  select { padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; }
+  #log { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:8px 0; }
+  .msg { max-width:94%; padding:10px 14px; border-radius:12px; line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+  .user { align-self:flex-end; background:var(--accent); color:#fff; }
+  .bot  { align-self:flex-start; background:var(--card); border:1px solid var(--border); }
+  .think { align-self:flex-start; color:var(--muted); font-size:12px; line-height:1.9; }
+  .think .cur { color:var(--accent); }
+  details.steps { margin-bottom:8px; font-size:12px; color:var(--muted); }
+  details.steps summary { cursor:pointer; color:var(--accent); }
+  pre.sql { background:#0f172a; color:#e2e8f0; padding:10px 12px; border-radius:8px; overflow-x:auto; font-size:13px; margin:8px 0 0; }
+  .tbl-box { overflow-x:auto; margin-top:8px; }
+  table { border-collapse:collapse; font-size:13px; }
+  th,td { border:1px solid var(--border); padding:4px 10px; text-align:left; }
+  th { background:#f1f5f9; }
+  .fb { margin-top:8px; }
+  .fb button, .confirm-btn { font-size:12px; padding:4px 12px; margin-right:6px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; }
+  .fb button:hover, .confirm-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .confirm-btn { background:#fff7ed; border-color:#fdba74; }
+  form { display:flex; gap:8px; padding-top:12px; }
+  input[type=text] { flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:10px; font-size:14px; }
+  button.send { padding:10px 20px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-size:14px; cursor:pointer; }
+  button.send:disabled { opacity:.5; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔍 智能问数</h1>
+    <label>数据源 <select id="ds"></select></label>
+    <span class="hint">完整体验请使用 Chainlit 前端(chainlit run ui/chainlit_app.py)</span>
+  </header>
+  <div id="log"></div>
+  <form id="form">
+    <input type="text" id="q" placeholder="例如:上个月各地区的销售额是多少?" autocomplete="off">
+    <button class="send" id="send" type="submit">提问</button>
+  </form>
+</div>
+<script>
+const log = document.getElementById('log');
+let sessionId = null;
+let pendingConfirm = null;
+const CONFIRM_RE = /^(确认执行|确认|确定|执行|继续|是的?|好的?|嗯|可以|ok|okay|yes|y)[!!。.~\s]*$/i;
+
+async function loadDatasources() {
+  const r = await fetch('/api/v1/datasources');
+  const j = await r.json();
+  const sel = document.getElementById('ds');
+  j.datasources.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.name;
+    o.textContent = d.description ? `${d.name}(${d.description})` : d.name;
+    sel.appendChild(o);
+  });
+}
+loadDatasources();
+
+function add(cls, html) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.innerHTML = html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+function renderTable(rows) {
+  if (!rows.length) return '<div class="tbl-box">(空结果)</div>';
+  const cols = Object.keys(rows[0]);
+  let h = '<div class="tbl-box"><table><tr>' + cols.map(c=>`<th>${esc(c)}</th>`).join('') + '</tr>';
+  rows.slice(0,50).forEach(r => {
+    h += '<tr>' + cols.map(c=>`<td>${esc(r[c] ?? '')}</td>`).join('') + '</tr>';
+  });
+  return h + '</table></div>';
+}
+
+async function sendFeedback(auditId, adopted, el) {
+  await fetch('/api/v1/feedback', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({audit_id: auditId, adopted})
+  });
+  el.innerHTML = adopted ? '✅ 已采纳,回灌样例库' : '已记录';
+}
+
+async function ask(question, confirmed) {
+  document.getElementById('send').disabled = true;
+  if (!confirmed) add('user', esc(question));
+  const steps = [];
+  const thinkEl = add('think', '…');
+  const renderSteps = (cur) => {
+    thinkEl.innerHTML = steps.map((s,i) =>
+      (i === steps.length-1 && cur ? `<span class="cur">⏳ ${esc(s)}</span>` : `✓ ${esc(s)}`)
+    ).join('<br>');
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const resp = await fetch('/api/v1/chat', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({session_id: sessionId, datasource: document.getElementById('ds').value,
+                          question, confirmed: !!confirmed})
+  });
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', sqlShown = '', rowsShown = null, chartOption = null;
+
+  const handle = (event, data) => {
+    if (event === 'session') sessionId = data.session_id;
+    else if (event === 'thinking') { steps.push(data.step); renderSteps(true); }
+    else if (event === 'sql') sqlShown = data.sql;
+    else if (event === 'rows') rowsShown = data.rows;
+    else if (event === 'chart') chartOption = data.option;
+    else if (event === 'error') add('bot', '❌ ' + esc(data.message));
+    else if (event === 'answer') {
+      thinkEl.remove();
+      // 执行过程折叠展示(可核对每一步)
+      let h = '';
+      if (steps.length) {
+        h += `<details class="steps"><summary>执行过程(${steps.length} 步)</summary>` +
+             steps.map(s=>'✓ '+esc(s)).join('<br>') + '</details>';
+      }
+      // 回答中的 ```sql 围栏转为代码块展示(如 HITL 确认提示)
+      let ansText = data.answer || '';
+      const fence = ansText.match(/```sql\n([\s\S]*?)\n```/);
+      if (fence) ansText = ansText.replace(fence[0], '').trim();
+      h += esc(ansText);
+      if (fence) h += `<pre class="sql">${esc(fence[1])}</pre>`;
+      if (data.status !== 'needs_confirm' && sqlShown) h += `<pre class="sql">${esc(sqlShown)}</pre>`;
+      if (data.llm_summary) h += `<div style="font-size:12px;color:var(--muted);margin-top:6px">${esc(data.llm_summary)}</div>`;
+      if (rowsShown) h += renderTable(rowsShown);
+      const botEl = add('bot', h);
+      if (chartOption && window.echarts) {
+        const box = document.createElement('div');
+        box.style.cssText = 'width:100%;min-width:480px;height:320px;margin-top:8px';
+        botEl.appendChild(box);
+        echarts.init(box).setOption(chartOption);
+        log.scrollTop = log.scrollHeight;
+      }
+      if (data.status === 'needs_confirm') {
+        pendingConfirm = question;   // 支持直接输入"确认/确定"继续
+        const btn = document.createElement('button');
+        btn.className = 'confirm-btn';
+        btn.textContent = '✅ 确认执行';
+        btn.onclick = () => { btn.disabled = true; pendingConfirm = null; ask(question, true); };
+        botEl.appendChild(btn);
+      }
+      if (data.audit_id && data.status === 'success') {
+        const fb = document.createElement('div');
+        fb.className = 'fb';
+        fb.innerHTML = `<button>👍 采纳</button><button>👎 有误</button>`;
+        const [ok, no] = fb.querySelectorAll('button');
+        ok.onclick = () => sendFeedback(data.audit_id, true, fb);
+        no.onclick = () => sendFeedback(data.audit_id, false, fb);
+        botEl.appendChild(fb);
+      }
+    }
+  };
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream:true});
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      let ev = 'message', data = null;
+      chunk.split('\n').forEach(line => {
+        if (line.startsWith('event: ')) ev = line.slice(7);
+        if (line.startsWith('data: ')) data = JSON.parse(line.slice(6));
+      });
+      if (data !== null) handle(ev, data);
+    }
+  }
+  document.getElementById('send').disabled = false;
+}
+
+document.getElementById('form').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = document.getElementById('q');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+  if (pendingConfirm && CONFIRM_RE.test(question)) {   // 文字确认 = 点击确认按钮
+    const q = pendingConfirm; pendingConfirm = null;
+    add('user', esc(question));
+    ask(q, true);
+    return;
+  }
+  pendingConfirm = null;
+  ask(question, false);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+# 数据源注册(设计文档 §4.1):新增数据源只加配置。
+# 生产环境请使用只读账号,并显式配置 allowed_tables 白名单。
+datasources:
+  demo:
+    dialect: sqlite
+    description: 演示销售库
+    conn:
+      path: data/demo.db
+    allowed_tables: [customers, employees, products, orders, order_items, returns, sales_targets]
+    sensitive_columns: [customers.contact_phone]   # 敏感列:禁止查询,样例行中脱敏
+    large_tables: [orders, order_items]            # 大表:无过滤条件查询触发 HITL 人工确认
+    # row_filters:                                 # 行级权限示例:按需启用(模板中 {t} 为表别名)
+    #   orders: "{t}.status != '已取消'"
+    semantics_file: config/semantics/demo.yaml
+
+  # 剧本杀连锁门店演示库(马鞍山 5 店):简历项目场景,可切换数据源演示
+  scriptkill:
+    dialect: sqlite
+    description: 剧本杀连锁门店经营库(马鞍山 5 店)
+    conn:
+      path: data/scriptkill.db
+    allowed_tables: [stores, staff, scripts, script_licenses, players,
+                     sessions, session_players, revenue_targets]
+    sensitive_columns: [players.phone, staff.phone]   # 手机号禁止查询,样例行中脱敏
+    large_tables: [sessions, session_players]          # 无过滤条件查询触发 HITL 人工确认
+    # 生产环境按门店隔离:每个门店一个只读账号,并启用如下行级过滤(5 店各配一份)
+    # row_filters:
+    #   stores: "{t}.id = 1"
+    #   staff: "{t}.store_id = 1"
+    #   sessions: "{t}.store_id = 1"
+    #   script_licenses: "{t}.store_id = 1"
+    #   revenue_targets: "{t}.store_id = 1"
+    semantics_file: config/semantics/scriptkill.yaml
+
+  # ---- 以下为生产数据源配置示例,按需启用 ----
+  # sales_mysql:
+  #   dialect: mysql
+  #   description: 销售库(MySQL)
+  #   conn: {user: readonly, password: "xxx", host: 10.0.0.1, port: 3306, database: sales}
+  #   allowed_tables: [t_order, t_customer]
+  #   semantics_file: config/semantics/sales_mysql.yaml
+  #
+  # erp_dm:
+  #   dialect: dm            # 达梦 DM8,需安装 dmPython + 达梦 SQLAlchemy 方言包
+  #   description: ERP库(达梦)
+  #   conn: {user: READONLY, password: "xxx", host: 10.0.0.2, port: 5236}
+  #   allowed_tables: [T_XT_YHXX]
+  #   semantics_file: config/semantics/erp_dm.yaml
+  #
+  # gov_kingbase:
+  #   dialect: kingbase      # 金仓,需安装 ksycopg2 + 金仓方言包
+  #   description: 政务库(金仓)
+  #   conn: {user: readonly, password: "xxx", host: 10.0.0.3, port: 54321, database: gov}
+  #   allowed_tables: []
+  #   semantics_file: config/semantics/gov_kingbase.yaml
+  #
+  # trade_ob:
+  #   dialect: oceanbase     # OceanBase MySQL 模式:pymysql 直连,无需额外驱动
+  #   description: 交易库(OceanBase)
+  #   conn:
+  #     # 经 obproxy:端口 2883,用户名 "用户@租户#集群";直连 observer:端口 2881,用户名 "用户@租户"
+  #     user: "readonly@biz_tenant#ob_cluster"
+  #     password: "xxx"
+  #     host: 10.0.0.4
+  #     port: 2883
+  #     database: trade
+  #   allowed_tables: []
+  #   sensitive_columns: []
+  #   semantics_file: config/semantics/trade_ob.yaml

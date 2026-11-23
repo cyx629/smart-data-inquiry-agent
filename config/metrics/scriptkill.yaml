@@ -1,0 +1,108 @@
+# 剧本杀指标语义层:命中即跳过 LLM 生成,确定性直出。
+# overrides:问题归一化后精确匹配 → 强制 SQL;
+# metrics:正则命名分组 → SQL 模板,{month2} 为补零月份(6 -> 06)。
+
+overrides:
+  - name: 客单价口径
+    question: 客单价是多少
+    sql: >
+      SELECT ROUND(SUM(total_amount) * 1.0 / NULLIF(SUM(player_count), 0), 2) AS 人均消费
+      FROM sessions WHERE status = '已完成'
+
+  - name: 今日剧本排行
+    question: 今天哪个本卖得最好
+    sql: >
+      SELECT sc.name AS 剧本, COUNT(*) AS 完成场次
+      FROM sessions s JOIN scripts sc ON s.script_id = sc.id
+      WHERE s.status = '已完成'
+        AND s.session_date = (SELECT MAX(session_date) FROM sessions)
+      GROUP BY sc.name ORDER BY 完成场次 DESC, sc.name LIMIT 10
+
+  - name: 今日DM排行
+    question: 今天哪个DM场次最多
+    sql: >
+      SELECT st.name AS DM, COUNT(*) AS 完成场次
+      FROM sessions s JOIN staff st ON s.dm_id = st.id
+      WHERE s.status = '已完成'
+        AND s.session_date = (SELECT MAX(session_date) FROM sessions)
+      GROUP BY st.name ORDER BY 完成场次 DESC, st.name LIMIT 10
+
+metrics:
+  # ---- 门店营收:更具体的模式放前面 ----
+  - name: 月度门店营收
+    pattern: '(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?(?P<store>花山万达店|雨山金鹰店|当涂步行街店|含山中心店|和县历阳店)(门店)?的?(营业额|营收|收入|流水|销售额)'
+    sql_template: >
+      SELECT SUM(s.total_amount) AS 营收
+      FROM sessions s JOIN stores st ON s.store_id = st.id
+      WHERE s.status = '已完成' AND st.name = '{store}'
+        AND strftime('%Y-%m', s.session_date) = '{year}-{month2}'
+
+  - name: 门店月度营收(店名在前)
+    pattern: '(?P<store>花山万达店|雨山金鹰店|当涂步行街店|含山中心店|和县历阳店)(门店)?(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?的?(营业额|营收|收入|流水|销售额)'
+    sql_template: >
+      SELECT SUM(s.total_amount) AS 营收
+      FROM sessions s JOIN stores st ON s.store_id = st.id
+      WHERE s.status = '已完成' AND st.name = '{store}'
+        AND strftime('%Y-%m', s.session_date) = '{year}-{month2}'
+
+  - name: 月度门店营收排行
+    pattern: '(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?.*(各|所有|哪个|哪些)?门店.*(营收|营业额|收入|流水|销售|排名|排行|对比)'
+    sql_template: >
+      SELECT st.name AS 门店, ROUND(SUM(s.total_amount), 2) AS 营收
+      FROM sessions s JOIN stores st ON s.store_id = st.id
+      WHERE s.status = '已完成'
+        AND strftime('%Y-%m', s.session_date) = '{year}-{month2}'
+      GROUP BY st.name ORDER BY 营收 DESC, st.name
+
+  # ---- 月度剧本 / DM 排行 ----
+  - name: 月度剧本场次排行
+    pattern: '(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?.*(剧本|本).*(最多|排行|排名|最火|热门|卖得|开得|场次)'
+    sql_template: >
+      SELECT sc.name AS 剧本, COUNT(*) AS 完成场次
+      FROM sessions s JOIN scripts sc ON s.script_id = sc.id
+      WHERE s.status = '已完成'
+        AND strftime('%Y-%m', s.session_date) = '{year}-{month2}'
+      GROUP BY sc.name ORDER BY 完成场次 DESC, sc.name LIMIT 10
+
+  - name: 月度DM场次排行
+    pattern: '(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?.*DM.*(场次|最多|排行|排名|开得|谁)'
+    sql_template: >
+      SELECT st.name AS DM, COUNT(*) AS 完成场次
+      FROM sessions s JOIN staff st ON s.dm_id = st.id
+      WHERE s.status = '已完成'
+        AND strftime('%Y-%m', s.session_date) = '{year}-{month2}'
+      GROUP BY st.name ORDER BY 完成场次 DESC, st.name LIMIT 10
+
+  # ---- 月度总营收:放在门店/排行模式之后 ----
+  - name: 月度营收
+    pattern: '(?P<year>20\d{2})年(?P<month>\d{1,2})月(份)?的?(总)?(营业额|营收|收入|流水|销售额)'
+    sql_template: >
+      SELECT SUM(total_amount) AS 营收 FROM sessions
+      WHERE status = '已完成'
+        AND strftime('%Y-%m', session_date) = '{year}-{month2}'
+
+  # ---- 今日(取库内最新一天,演示环境不依赖服务器当天日期) ----
+  - name: 今日剧本场次排行
+    pattern: '今天.*(哪个|哪些|什么).*(剧本|本).*(卖得|开得|最多|排行|最火|好)'
+    sql_template: >
+      SELECT sc.name AS 剧本, COUNT(*) AS 完成场次
+      FROM sessions s JOIN scripts sc ON s.script_id = sc.id
+      WHERE s.status = '已完成'
+        AND s.session_date = (SELECT MAX(session_date) FROM sessions)
+      GROUP BY sc.name ORDER BY 完成场次 DESC, sc.name LIMIT 10
+
+  - name: 今日DM场次排行
+    pattern: '今天.*(哪个|哪些|谁).*DM.*(场次|最多|开得|排行)'
+    sql_template: >
+      SELECT st.name AS DM, COUNT(*) AS 完成场次
+      FROM sessions s JOIN staff st ON s.dm_id = st.id
+      WHERE s.status = '已完成'
+        AND s.session_date = (SELECT MAX(session_date) FROM sessions)
+      GROUP BY st.name ORDER BY 完成场次 DESC, st.name LIMIT 10
+
+  - name: 今日营收
+    pattern: '今天(的)?(总)?(营业额|营收|收入|流水|销售额)(是)?(多少|怎么样)?'
+    sql_template: >
+      SELECT SUM(total_amount) AS 营收 FROM sessions
+      WHERE status = '已完成'
+        AND session_date = (SELECT MAX(session_date) FROM sessions)

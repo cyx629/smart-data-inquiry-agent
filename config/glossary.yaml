@@ -1,0 +1,17 @@
+# 业务术语表(设计文档 §6.1):口径全量注入生成 prompt。
+- term: 大客户
+  definition: 年采购额 > 500万元(annual_purchase > 5000000)的客户
+- term: 销售额
+  definition: 已完成订单(status='已完成')的订单金额之和
+- term: 动销产品
+  definition: 统计周期内至少出现在一笔已完成订单明细中的产品
+- term: 产品/类别维度的销售额
+  definition: 按订单明细小计(order_items.subtotal)汇总已完成订单,不要用orders.amount(会按明细行数重复累加)
+- term: 退货率
+  definition: 发生退货的已完成订单数 ÷ 已完成订单总数(按 returns.order_id 去重计数)
+- term: 目标达成率
+  definition: 某大区某月的实际销售额 ÷ sales_targets.target_amount(实际销售额按已完成订单)
+- term: 在职销售员
+  definition: employees.resign_date 为 NULL 的销售员
+- term: 客单价
+  definition: 已完成订单总金额 ÷ 下单客户数(去重)
